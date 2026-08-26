@@ -1040,6 +1040,7 @@ app.post('/api/generate-image', requireAuth, requireAccess, requireQuota('image'
     const {
       prompt,
       baseImage, // optional { data: string (base64), mimeType: string } for editing
+      images, // optional array [{ data, mimeType }] for compositing multiple images
       aspectRatio = '1:1', // "1:1" | "3:4" | "4:3" | "9:16" | "16:9"
     } = req.body;
 
@@ -1061,31 +1062,28 @@ app.post('/api/generate-image', requireAuth, requireAccess, requireQuota('image'
     let imageUrlResult = null;
     let descriptionText = '';
 
+    // Support both single baseImage and multiple images array
+    const allImages = images && images.length > 0 ? images : (baseImage?.data ? [baseImage] : []);
+
     for (const model of imageModels) {
       try {
         console.info(`Requesting Image generation/edit with model: ${model}`);
         let parts: any[] = [];
 
-        if (baseImage?.data) {
-          // Editing existing image
-          parts = [
-            {
+        if (allImages.length > 0) {
+          // Add all reference images
+          for (const img of allImages) {
+            parts.push({
               inlineData: {
-                data: baseImage.data,
-                mimeType: baseImage.mimeType || 'image/jpeg',
+                data: img.data,
+                mimeType: img.mimeType || 'image/jpeg',
               },
-            },
-            {
-              text: prompt,
-            },
-          ];
+            });
+          }
+          parts.push({ text: prompt });
         } else {
           // Creating new image from text prompt
-          parts = [
-            {
-              text: prompt,
-            },
-          ];
+          parts = [{ text: prompt }];
         }
 
         const config: any = {
@@ -1132,7 +1130,7 @@ app.post('/api/generate-image', requireAuth, requireAccess, requireQuota('image'
       imageUrl: imageUrlResult,
       prompt,
       text: descriptionText,
-      mode: baseImage?.data ? 'edit' : 'create',
+      mode: allImages.length > 0 ? 'edit' : 'create',
       aspectRatio,
     });
   } catch (error: any) {

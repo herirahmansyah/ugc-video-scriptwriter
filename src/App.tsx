@@ -226,16 +226,16 @@ export default function App() {
     if (!characterImage || !productImage) return;
     setIsGeneratingPreview(true);
     try {
-      const prompt = `Create a UGC-style product review photo: a real person (from the reference photo) casually using or holding this product in a natural, authentic setting. The person looks natural and genuine, like they are recommending the product to a friend. Product should be clearly visible and well-lit. Natural lighting, smartphone-quality aesthetic, not overly polished or commercial.`;
+      const prompt = `Combine these two images into one UGC-style product review photo. The person from the first image should be naturally holding or using the product from the second image. Keep both the person's face and the product clearly visible. Natural lighting, authentic smartphone-quality aesthetic, not overly commercial.`;
       const response = await authFetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
-          baseImage: {
-            data: characterImage.data,
-            mimeType: characterImage.mimeType,
-          },
+          images: [
+            { data: characterImage.data, mimeType: characterImage.mimeType },
+            { data: productImage.data, mimeType: productImage.mimeType },
+          ],
           aspectRatio: '9:16',
         }),
       });
