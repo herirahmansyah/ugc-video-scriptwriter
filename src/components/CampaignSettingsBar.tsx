@@ -96,7 +96,7 @@ export const CampaignSettingsBar: React.FC<CampaignSettingsBarProps> = ({
           onChange={(e) => onChange({ productName: e.target.value })}
           disabled={disabled}
           style={{ WebkitTextFillColor: 'inherit', caretColor: 'inherit' }}
-          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-400 dark:focus:border-indigo-400"
+          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-400 dark:focus:border-indigo-400 dark:focus:bg-white dark:focus:text-slate-900"
         />
         <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
           Nama produk akan disebut dalam script, CTA, dan caption
