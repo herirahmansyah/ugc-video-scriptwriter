@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -20,6 +20,8 @@ import {
 } from './server/midtrans';
 import { startCronJobs } from './server/cron';
 import { enforceConfig } from './server/config';
+import { requireQuota, recordUsage, getUsageSummary, isPro } from './server/usage';
+import type { Feature } from './server/usage';
 
 dotenv.config();
 
@@ -117,6 +119,7 @@ app.get('/api/subscription/status', requireAuth, async (req, res) => {
       current_period_end: sub.current_period_end,
       access_active: isAccessActive(sub),
       price_idr: PRICE_IDR,
+      usage: await getUsageSummary(req.authUser!.id, sub),
     });
   } catch (error: any) {
     console.error('Subscription status error:', error);
@@ -203,16 +206,16 @@ app.post('/api/midtrans/webhook', async (req, res) => {
   }
 });
 
-// Lazy initialize Gemini client
-let genAIClient: GoogleGenAI | null = null;
+// Lazy initialize Gemini clients, cached per API key (dual-key routing)
+const genAIClients = new Map<string, GoogleGenAI>();
 
-function getGenAI(): GoogleGenAI {
-  if (!genAIClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
+function getGenAI(apiKey: string): GoogleGenAI {
+  let client = genAIClients.get(apiKey);
+  if (!client) {
     if (!apiKey) {
-      console.warn('GEMINI_API_KEY is not set in environment.');
+      console.warn('No Gemini API key available for this request.');
     }
-    genAIClient = new GoogleGenAI({
+    client = new GoogleGenAI({
       apiKey: apiKey || '',
       httpOptions: {
         headers: {
@@ -220,8 +223,21 @@ function getGenAI(): GoogleGenAI {
         },
       },
     });
+    genAIClients.set(apiKey, client);
   }
-  return genAIClient;
+  return client;
+}
+
+/**
+ * Dual-key routing: trial users are served with the free-tier key (zero cost),
+ * paying PRO users consume the prepaid/billing key. Keys never leave the server.
+ */
+function getKeyForRequest(req: express.Request): string {
+  const sub = req.subscription;
+  if (sub && isPro(sub) && process.env.GEMINI_API_KEY) {
+    return process.env.GEMINI_API_KEY;
+  }
+  return process.env.TRIAL_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
 }
 
 // Generates emergency offline / high-demand resilient UGC script if upstream Google API is 503
@@ -278,7 +294,7 @@ function generateResilientBackupScript(params: {
       openingLine: isIndo
         ? 'Jujur nyesel banget baru tahu rahasia ini sekarang, pantesan viral di mana-mana!'
         : 'Stop scrolling! If you deal with this every single day, you need to see this right now.',
-      screenText: isIndo ? 'NYESEL BARU TAHU SEKARANG 😭⚠️' : 'STOP SCROLLING 🚨 MUST HAVE',
+      screenText: isIndo ? 'NYESEL BARU TAHU SEKARANG ðŸ˜­âš ï¸' : 'STOP SCROLLING ðŸš¨ MUST HAVE',
       audioTip: 'Sound efek Whoosh cepat + beat musik lo-fi / trending upbeat',
       alternativeHooks: isIndo ? [
         'Kalian ngerasa ga sih masalah ini ganggu banget tiap hari?',
@@ -287,7 +303,7 @@ function generateResilientBackupScript(params: {
       ] : [
         'POV: You finally found the one thing that actually works.',
         'Do not buy this unless you want everyone asking what your secret is!',
-        'I tried this viral hack so you don’t have to waste your money.'
+        'I tried this viral hack so you donâ€™t have to waste your money.'
       ]
     },
     problem: {
@@ -301,7 +317,7 @@ function generateResilientBackupScript(params: {
       spokenLine: isIndo
         ? 'Dulu tuh capek banget nyobain macem-macem cara tapi hasilnya nihil dan buang duit.'
         : 'I used to struggle with this constantly and spent way too much on things that never worked.',
-      onScreenText: isIndo ? 'Dulu capek banget... 💸' : 'Tired of wasting money? 😫'
+      onScreenText: isIndo ? 'Dulu capek banget... ðŸ’¸' : 'Tired of wasting money? ðŸ˜«'
     },
     solution: {
       timeframe: '0:08 - 0:22',
@@ -343,21 +359,21 @@ function generateResilientBackupScript(params: {
       timeframe: '0:22 - 0:30',
       closingAction: ctaAction,
       spokenLine: ctaSpoken,
-      onScreenSticker: isIndo ? 'KLIK KERANJANG DISKON HARI INI 🛒👇' : 'TAP BELOW TO GET YOURS 🛍️🔥',
+      onScreenSticker: isIndo ? 'KLIK KERANJANG DISKON HARI INI ðŸ›’ðŸ‘‡' : 'TAP BELOW TO GET YOURS ðŸ›ï¸ðŸ”¥',
       actionType: isTikTok ? 'Klik Keranjang Kuning' : isShopee ? 'Checkout Shopee' : 'Link in Bio'
     },
     caption: {
-      hookLine: isIndo ? 'Akhirnya nemu solusi yang beneran works! 😍✨' : 'The secret is finally out! ✨',
+      hookLine: isIndo ? 'Akhirnya nemu solusi yang beneran works! ðŸ˜âœ¨' : 'The secret is finally out! âœ¨',
       bodyText: isIndo 
         ? 'Gak nyangka hasilnya secepet ini. Wajib cobain sendiri mumpung lagi ada promo bundling & free ongkir hari ini!'
         : 'Honestly obsessed with how easy this made my daily routine. Grab yours before this batch sells out!',
-      ctaLine: isIndo ? '👇 Klik keranjang kuning / link di bio sebelum kehabisan!' : '👇 Tap the link in bio to shop now!',
+      ctaLine: isIndo ? 'ðŸ‘‡ Klik keranjang kuning / link di bio sebelum kehabisan!' : 'ðŸ‘‡ Tap the link in bio to shop now!',
       hashtags: isIndo 
         ? ['#racunugc', '#reviewjujur', '#viralindonesia', '#rekomendasiproduk', '#ugccreator']
         : ['#ugccommunity', '#musthaves', '#viralproduct', '#honestreview', '#skincareroutine'],
       fullCaptionReadyToPost: isIndo
-        ? 'Akhirnya nemu solusi yang beneran works! 😍✨\n\nGak nyangka hasilnya sebagus ini. Buat kalian yang punya masalah sama, mumpung lagi promo diskon & gratis ongkir langsung amankan sekarang!\n\n👇 Klik keranjang kuning sekarang sebelum kehabisan voucher!\n\n#racunugc #reviewjujur #viralindonesia #rekomendasiproduk'
-        : 'The secret is finally out! 😍✨\n\nHonestly obsessed with how easy this made my daily routine. Grab yours before this batch sells out!\n\n👇 Tap below to shop the sale now!\n\n#ugccommunity #musthaves #viralproduct #honestreview'
+        ? 'Akhirnya nemu solusi yang beneran works! ðŸ˜âœ¨\n\nGak nyangka hasilnya sebagus ini. Buat kalian yang punya masalah sama, mumpung lagi promo diskon & gratis ongkir langsung amankan sekarang!\n\nðŸ‘‡ Klik keranjang kuning sekarang sebelum kehabisan voucher!\n\n#racunugc #reviewjujur #viralindonesia #rekomendasiproduk'
+        : 'The secret is finally out! ðŸ˜âœ¨\n\nHonestly obsessed with how easy this made my daily routine. Grab yours before this batch sells out!\n\nðŸ‘‡ Tap below to shop the sale now!\n\n#ugccommunity #musthaves #viralproduct #honestreview'
     },
     storyboard: [
       {
@@ -366,7 +382,7 @@ function generateResilientBackupScript(params: {
         shotType: 'Close-Up (CU)',
         visualDirection: isIndo ? 'Talent menghadap kamera dengan ekspresi kaget / antusias' : 'Creator leans into camera with enthusiastic expression',
         spokenDialogue: isIndo ? 'Jujur nyesel banget baru tahu rahasia ini sekarang!' : 'Stop scrolling! You need to see this right now.',
-        textOverlay: isIndo ? 'NYESEL BARU TAHU 😭' : 'STOP SCROLLING 🚨',
+        textOverlay: isIndo ? 'NYESEL BARU TAHU ðŸ˜­' : 'STOP SCROLLING ðŸš¨',
         sfxOrMusicTip: 'Whoosh SFX + Upbeat Pop Synth'
       },
       {
@@ -375,7 +391,7 @@ function generateResilientBackupScript(params: {
         shotType: 'Medium Close-Up (MCU)',
         visualDirection: isIndo ? 'Menjelaskan rasa frustrasi sebelum menemukan produk' : 'Explaining previous struggles with alternative products',
         spokenDialogue: isIndo ? 'Dulu tuh capek banget coba-coba macem-macem cara tapi gagal mulu.' : 'I used to struggle with this constantly every single morning.',
-        textOverlay: isIndo ? 'Masalah yang sering dialami...' : 'Daily struggle is real 😫',
+        textOverlay: isIndo ? 'Masalah yang sering dialami...' : 'Daily struggle is real ðŸ˜«',
         sfxOrMusicTip: 'Soft background beat'
       },
       {
@@ -384,7 +400,7 @@ function generateResilientBackupScript(params: {
         shotType: 'Macro Cut-In + Application',
         visualDirection: isIndo ? 'Demonstrasi pemakaian produk & ekspresi takjub' : 'Demonstrating application and showing immediate result',
         spokenDialogue: isIndo ? 'Pas nyobain ini langsung kerasa bedanya, hasilnya beneran se-glow ini!' : 'Look at this instant transformation, it is so effortless!',
-        textOverlay: isIndo ? 'Hasilnya Nyata Banget! ✨' : 'Look at this result! ✨',
+        textOverlay: isIndo ? 'Hasilnya Nyata Banget! âœ¨' : 'Look at this result! âœ¨',
         sfxOrMusicTip: 'Sparkle sound effect'
       },
       {
@@ -393,7 +409,7 @@ function generateResilientBackupScript(params: {
         shotType: 'Medium Shot (MS)',
         visualDirection: ctaAction,
         spokenDialogue: ctaSpoken,
-        textOverlay: isIndo ? 'PROMO SPESIAL HARI INI 🛒' : 'LIMITED TIME DEAL 🛒',
+        textOverlay: isIndo ? 'PROMO SPESIAL HARI INI ðŸ›’' : 'LIMITED TIME DEAL ðŸ›’',
         sfxOrMusicTip: 'Cash register ding / energetic outro'
       }
     ],
@@ -403,7 +419,7 @@ function generateResilientBackupScript(params: {
       'Pastikan 3 detik pertama memiliki gerakan dinamis agar penonton tidak skip video.'
     ] : [
       'Use natural daylight or a diffused softbox for crisp, authentic UGC skin tones.',
-      'Keep voice natural and friendly—treat the camera like your best friend on FaceTime.',
+      'Keep voice natural and friendlyâ€”treat the camera like your best friend on FaceTime.',
       'Deliver the hook in the first 3 seconds with high kinetic energy.'
     ],
     fullSpokenScript: isIndo
@@ -463,7 +479,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Main UGC Script Generator API
-app.post('/api/generate-ugc', requireAuth, requireAccess, async (req, res) => {
+app.post('/api/generate-ugc', requireAuth, requireAccess, requireQuota('script'), async (req, res) => {
   try {
     const {
       characterImage,
@@ -483,7 +499,7 @@ app.post('/api/generate-ugc', requireAuth, requireAccess, async (req, res) => {
       });
     }
 
-    const ai = getGenAI();
+    const ai = getGenAI(getKeyForRequest(req));
 
     // Map platform and language instructions
     const platformGuides: Record<string, string> = {
@@ -744,6 +760,7 @@ Please analyze the 2 provided images (Image 1: Creator, Image 2: Product) and ou
       ...parsedData,
     };
 
+    await recordUsage(req.authUser!.id, 'script', req.subscription!);
     return res.json(scriptResult);
   } catch (error: any) {
     console.error('Error generating UGC script:', error);
@@ -754,10 +771,10 @@ Please analyze the 2 provided images (Image 1: Creator, Image 2: Product) and ou
 });
 
 // Quick Hook Generator API
-app.post('/api/generate-more-hooks', requireAuth, requireAccess, async (req, res) => {
+app.post('/api/generate-more-hooks', requireAuth, requireAccess, requireQuota('script'), async (req, res) => {
   try {
     const { scriptContext, productSummary, language = 'id_casual' } = req.body;
-    const ai = getGenAI();
+    const ai = getGenAI(getKeyForRequest(req));
 
     const isIndo = language?.startsWith('id');
     const fallbackHooks = isIndo ? [
@@ -765,35 +782,35 @@ app.post('/api/generate-more-hooks', requireAuth, requireAccess, async (req, res
         hookName: 'Urgent Regret Hook',
         visualAction: 'Pegang produk dekat kamera dengan tatapan kaget',
         openingDialogue: 'Sumpah nyesel banget baru nemu ini sekarang, pantesan rame banget di FYP!',
-        onScreenText: 'NYESEL BARU TAHU 😭',
+        onScreenText: 'NYESEL BARU TAHU ðŸ˜­',
         hookAngle: 'Fear of Missing Out / High Curiosity'
       },
       {
         hookName: 'Stop Scroll Pain Point',
         visualAction: 'Tangan menghentikan scroll di depan lensa',
         openingDialogue: 'Stop scroll kalau kalian tiap hari masih ribet sama masalah ini!',
-        onScreenText: 'STOP SCROLLING 🛑',
+        onScreenText: 'STOP SCROLLING ðŸ›‘',
         hookAngle: 'Direct Problem Callout'
       },
       {
         hookName: 'Honest Review Shock',
         visualAction: 'Menepuk jidat lalu tersenyum puas',
         openingDialogue: 'Awalnya skeptis dikira cuma gimmick, pas dicoba ternyata beneran se-worth it itu!',
-        onScreenText: 'JUJUR INI DILUAR EKSPEKTASI 😱',
+        onScreenText: 'JUJUR INI DILUAR EKSPEKTASI ðŸ˜±',
         hookAngle: 'Skepticism to Belief Transformation'
       },
       {
         hookName: 'POV Relatable Morning',
         visualAction: 'Peragaan situasi harian sebelum memakai produk',
         openingDialogue: 'POV: Kamu akhirnya nemuin penyelamat hidup yang bikin semuanya serba praktis!',
-        onScreenText: 'POV: HIDUP JADI LEBIH GAMPANG ✨',
+        onScreenText: 'POV: HIDUP JADI LEBIH GAMPANG âœ¨',
         hookAngle: 'Relatable Lifestyle Situation'
       },
       {
         hookName: 'Exclusive Secret Deal',
         visualAction: 'Berbisik ke mikrofon sambil menunjuk produk',
         openingDialogue: 'Jangan bilang siapa-siapa, rahasia ini yang bikin temen-temenku pada heran!',
-        onScreenText: 'RAHASIA VIRAL 🤫🔥',
+        onScreenText: 'RAHASIA VIRAL ðŸ¤«ðŸ”¥',
         hookAngle: 'Insider Secret Knowledge'
       }
     ] : [
@@ -801,35 +818,35 @@ app.post('/api/generate-more-hooks', requireAuth, requireAccess, async (req, res
         hookName: 'Urgent Regret Hook',
         visualAction: 'Holding product close to camera with shocked expression',
         openingDialogue: 'I genuinely regret not finding this months ago, no wonder it is trending everywhere!',
-        onScreenText: 'WHY DID NO ONE TELL ME 😭',
+        onScreenText: 'WHY DID NO ONE TELL ME ðŸ˜­',
         hookAngle: 'FOMO / Curiosity'
       },
       {
         hookName: 'Stop Scroll Callout',
         visualAction: 'Hand gesture stopping the scroll directly at camera',
         openingDialogue: 'Stop scrolling if you are tired of wasting your money on things that never work!',
-        onScreenText: 'STOP SCROLLING 🛑',
+        onScreenText: 'STOP SCROLLING ðŸ›‘',
         hookAngle: 'Target Pain Point'
       },
       {
         hookName: 'Honest Testing',
         visualAction: 'Showing authentic first reaction test',
         openingDialogue: 'I tested this so you do not have to, and here is the honest truth!',
-        onScreenText: 'HONEST VIRAL TEST 😱',
+        onScreenText: 'HONEST VIRAL TEST ðŸ˜±',
         hookAngle: 'Social Proof & Transparency'
       },
       {
         hookName: 'POV Gamechanger',
         visualAction: 'Showing quick effortless routine',
         openingDialogue: 'POV: You found the holy grail item that changed your entire morning routine.',
-        onScreenText: 'POV: LIFE CHANGER ✨',
+        onScreenText: 'POV: LIFE CHANGER âœ¨',
         hookAngle: 'Relatable Lifestyle'
       },
       {
         hookName: 'Secret Hack',
         visualAction: 'Whispering to mic showing before/after snippet',
         openingDialogue: 'Keep this between us, but this one simple switch changed everything.',
-        onScreenText: 'THE REAL SECRET 🤫🔥',
+        onScreenText: 'THE REAL SECRET ðŸ¤«ðŸ”¥',
         hookAngle: 'Insider Tip'
       }
     ];
@@ -845,6 +862,9 @@ Output format: JSON array of objects with { "hookName": string, "visualAction": 
       });
 
       const parsed = JSON.parse(response.text || '[]');
+      if (parsed && parsed.length > 0) {
+        await recordUsage(req.authUser!.id, 'script', req.subscription!);
+      }
       return res.json({ hooks: parsed && parsed.length > 0 ? parsed : fallbackHooks });
     } catch {
       return res.json({ hooks: fallbackHooks });
@@ -858,7 +878,7 @@ Output format: JSON array of objects with { "hookName": string, "visualAction": 
 // ==========================================
 // 1. Veo Video Generation API (Animate Image to Video)
 // ==========================================
-app.post('/api/generate-video', requireAuth, requireAccess, async (req, res) => {
+app.post('/api/generate-video', requireAuth, requireAccess, requireQuota('video'), async (req, res) => {
   try {
     const {
       image, // { data: string (base64), mimeType: string }
@@ -867,7 +887,7 @@ app.post('/api/generate-video', requireAuth, requireAccess, async (req, res) => 
       resolution = '720p',
     } = req.body;
 
-    const ai = getGenAI();
+    const ai = getGenAI(getKeyForRequest(req));
     const cleanAspectRatio = aspectRatio === '16:9' ? '16:9' : '9:16';
     const cleanResolution = resolution === '1080p' ? '1080p' : '720p';
 
@@ -916,6 +936,8 @@ app.post('/api/generate-video', requireAuth, requireAccess, async (req, res) => 
       throw lastError || new Error('Failed to initiate video generation with Veo models.');
     }
 
+    await recordUsage(req.authUser!.id, 'video', req.subscription!);
+
     return res.json({
       operationName: operationResult.name,
       aspectRatio: cleanAspectRatio,
@@ -937,7 +959,7 @@ app.post('/api/video-status', requireAuth, requireAccess, async (req, res) => {
       return res.status(400).json({ error: 'operationName is required' });
     }
 
-    const ai = getGenAI();
+    const ai = getGenAI(getKeyForRequest(req));
     const updated = await ai.operations.getVideosOperation({
       operation: { name: operationName } as any,
     });
@@ -962,7 +984,7 @@ app.post('/api/video-download', requireAuth, requireAccess, async (req, res) => 
       return res.status(400).json({ error: 'operationName is required' });
     }
 
-    const ai = getGenAI();
+    const ai = getGenAI(getKeyForRequest(req));
     const updated = await ai.operations.getVideosOperation({
       operation: { name: operationName } as any,
     });
@@ -1013,7 +1035,7 @@ app.post('/api/video-download', requireAuth, requireAccess, async (req, res) => 
 // ==========================================
 // 2. Create & Edit Images API (gemini-3.1-flash-image-preview)
 // ==========================================
-app.post('/api/generate-image', requireAuth, requireAccess, async (req, res) => {
+app.post('/api/generate-image', requireAuth, requireAccess, requireQuota('image'), async (req, res) => {
   try {
     const {
       prompt,
@@ -1025,7 +1047,7 @@ app.post('/api/generate-image', requireAuth, requireAccess, async (req, res) => 
       return res.status(400).json({ error: 'Prompt is required for image generation/editing.' });
     }
 
-    const ai = getGenAI();
+    const ai = getGenAI(getKeyForRequest(req));
 
     // Models for image generation/editing as requested: gemini-3.1-flash-image-preview with fallbacks
     const imageModels = [
@@ -1104,6 +1126,8 @@ app.post('/api/generate-image', requireAuth, requireAccess, async (req, res) => 
       throw lastError || new Error('Failed to generate or edit image with AI image models.');
     }
 
+    await recordUsage(req.authUser!.id, 'image', req.subscription!);
+
     return res.json({
       imageUrl: imageUrlResult,
       prompt,
@@ -1150,3 +1174,4 @@ async function startServer() {
 }
 
 startServer();
+

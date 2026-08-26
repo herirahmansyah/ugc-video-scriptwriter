@@ -28,6 +28,14 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   expired_notified_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS usage_counters (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  feature TEXT NOT NULL,
+  period TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, feature, period)
+);
 `;
 
 export async function initDb() {

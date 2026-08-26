@@ -8,6 +8,7 @@ export interface SubscriptionStatus {
   current_period_end: string | null;
   access_active: boolean;
   price_idr: number;
+  usage?: Record<string, { used: number; limit: number }>;
 }
 
 interface AuthContextValue {

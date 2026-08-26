@@ -17,6 +17,8 @@ import {
   Hash,
   Layers,
   FileText,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { UGCScriptResult } from '../types';
 
@@ -26,6 +28,9 @@ interface UGCScriptViewerProps {
   onPlayAudio: () => void;
   onGenerateAlternativeHooks?: () => void;
   isGeneratingHooks?: boolean;
+  previewImage?: string | null;
+  onGeneratePreview?: () => void;
+  isGeneratingPreview?: boolean;
 }
 
 export const UGCScriptViewer: React.FC<UGCScriptViewerProps> = ({
@@ -34,9 +39,13 @@ export const UGCScriptViewer: React.FC<UGCScriptViewerProps> = ({
   onPlayAudio,
   onGenerateAlternativeHooks,
   isGeneratingHooks = false,
+  previewImage = null,
+  onGeneratePreview,
+  isGeneratingPreview = false,
 }) => {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'script' | 'storyboard' | 'caption'>('script');
+  const [viewMode, setViewMode] = useState<'simple' | 'full'>('simple');
 
   const copyToClipboard = (text: string, sectionKey: string) => {
     navigator.clipboard.writeText(text);
@@ -139,6 +148,35 @@ export const UGCScriptViewer: React.FC<UGCScriptViewerProps> = ({
         </div>
       </div>
 
+      {/* View Mode Toggle */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setViewMode('simple')}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+            viewMode === 'simple'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+          }`}
+        >
+          <FileText className="h-3.5 w-3.5" /> Ringkas
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('full')}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+            viewMode === 'full'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+          }`}
+        >
+          <Layers className="h-3.5 w-3.5" /> Lengkap
+        </button>
+        <span className="text-[11px] text-slate-400 dark:text-slate-500 ml-1">
+          {viewMode === 'simple' ? 'Tampilan untuk pemula' : 'Semua detail & analisis'}
+        </span>
+      </div>
+
       {/* View Mode Navigation Tabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-800">
         <button
@@ -176,8 +214,177 @@ export const UGCScriptViewer: React.FC<UGCScriptViewerProps> = ({
         </button>
       </div>
 
-      {/* TAB 1: The 6 Mandatory Sections */}
-      {activeTab === 'script' && (
+      {/* TAB 1: Simple View (Ringkas) */}
+      {activeTab === 'script' && viewMode === 'simple' && (
+        <div className="space-y-5">
+          {/* Preview Image (if generated) */}
+          {previewImage && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/30 p-4 dark:border-indigo-950 dark:bg-indigo-950/20">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                🎨 Preview Gambar Talent + Produk
+              </span>
+              <img
+                src={previewImage}
+                alt="Preview Talent + Produk"
+                className="mt-2 rounded-lg max-h-64 w-full object-cover"
+              />
+            </div>
+          )}
+
+          {/* Generate Preview Button */}
+          {onGeneratePreview && !previewImage && (
+            <button
+              type="button"
+              onClick={onGeneratePreview}
+              disabled={isGeneratingPreview}
+              className="w-full rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/30 p-4 text-sm text-indigo-600 hover:bg-indigo-50 transition disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-400"
+            >
+              {isGeneratingPreview ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+                  Membuat preview gambar...
+                </span>
+              ) : (
+                '✨ Buat Preview Gambar Talent + Produk'
+              )}
+            </button>
+          )}
+
+          {/* HOOK - Apa yang dikatakan di 3 detik pertama */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                <Flame className="h-4 w-4" /> HOOK (0-3 Detik)
+              </span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(`Hook: ${script.hook.openingLine}\nTeks Layar: ${script.hook.screenText}`, 'hook-simple')}
+                className="text-[11px] text-amber-700 hover:text-amber-800 dark:text-amber-300"
+              >
+                {copiedSection === 'hook-simple' ? '✓ Tersalin' : 'Salin'}
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Dialog:</span>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  "{script.hook.openingLine}"
+                </p>
+              </div>
+              {script.hook.screenText && (
+                <div className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-yellow-300 dark:bg-black">
+                  📱 Teks di Layar: {script.hook.screenText}
+                </div>
+              )}
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Aksi Visual:</span>
+                <p className="text-xs text-slate-700 dark:text-slate-300">{script.hook.visualAction}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* FULL SCRIPT - Spoken Script siap baca */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <Volume2 className="h-4 w-4" /> SCRIPT LENGKAP (Siap Baca)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onPlayAudio}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300"
+                >
+                  <Volume2 className="h-3 w-3" /> Audio
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenTeleprompter}
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                >
+                  <Tv className="h-3 w-3" /> Teleprompter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(script.fullSpokenScript, 'full-script')}
+                  className="text-[11px] text-emerald-700 hover:text-emerald-800 dark:text-emerald-300"
+                >
+                  {copiedSection === 'full-script' ? '✓ Tersalin' : 'Salin'}
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 rounded-lg bg-white p-3 text-sm leading-relaxed text-slate-800 shadow-sm dark:bg-slate-900 dark:text-slate-200">
+              {script.fullSpokenScript}
+            </div>
+          </div>
+
+          {/* CTA - Apa yang dilakukan talent di akhir */}
+          <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-4 dark:border-purple-900/60 dark:bg-purple-950/20">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-bold text-purple-800 dark:text-purple-300">
+                <ShoppingBag className="h-4 w-4" /> CTA / Penutup
+              </span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(`CTA: ${script.cta.spokenLine}\nTarget: ${script.cta.actionType}`, 'cta-simple')}
+                className="text-[11px] text-purple-700 hover:text-purple-800 dark:text-purple-300"
+              >
+                {copiedSection === 'cta-simple' ? '✓ Tersalin' : 'Salin'}
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Dialog Penutup:</span>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  "{script.cta.spokenLine}"
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-lg bg-purple-100 px-3 py-1 text-xs font-bold text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                  🎯 {script.cta.actionType}
+                </span>
+                {script.cta.onScreenSticker && (
+                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    {script.cta.onScreenSticker}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* CAPTION - Siap copy paste */}
+          <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-4 dark:border-sky-900/60 dark:bg-sky-950/20">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-bold text-sky-800 dark:text-sky-300">
+                <Hash className="h-4 w-4" /> Caption Siap Post
+              </span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(script.caption.fullCaptionReadyToPost, 'caption-simple')}
+                className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-sky-700"
+              >
+                {copiedSection === 'caption-simple' ? <><Check className="h-3 w-3" /> Tersalin</> : '📋 Salin Caption'}
+              </button>
+            </div>
+            <div className="mt-3 rounded-lg bg-white p-3 text-xs text-slate-800 whitespace-pre-wrap shadow-sm dark:bg-slate-900 dark:text-slate-200">
+              {script.caption.fullCaptionReadyToPost}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {script.caption.hashtags.map((tag, i) => (
+                <span
+                  key={i}
+                  className="rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:bg-slate-800 dark:text-sky-300"
+                >
+                  {tag.startsWith('#') ? tag : `#${tag}`}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 1: Full View (6 Sections) */}
+      {activeTab === 'script' && viewMode === 'full' && (
         <div className="space-y-6">
           {/* SECTION 1: Analisis Visual */}
           <div

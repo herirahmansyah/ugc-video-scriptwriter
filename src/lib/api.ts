@@ -27,5 +27,15 @@ export async function authFetch(input: string, init?: RequestInit): Promise<Resp
     window.dispatchEvent(new CustomEvent('ugc:trial-expired'));
     throw new TrialExpiredError();
   }
+  if (res.status === 429) {
+    let message = 'Kuota Anda sudah habis.';
+    try {
+      message = (await res.json()).error || message;
+    } catch {
+      /* keep default */
+    }
+    window.dispatchEvent(new CustomEvent('ugc:quota-exceeded', { detail: message }));
+    throw new Error(message);
+  }
   return res;
 }

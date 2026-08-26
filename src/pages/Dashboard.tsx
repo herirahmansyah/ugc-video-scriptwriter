@@ -15,8 +15,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     const onTrialExpired = () => navigate('/pricing');
+    const onQuotaExceeded = (e: Event) => {
+      const msg = (e as CustomEvent).detail || 'Kuota Anda sudah habis.';
+      alert(msg);
+    };
     window.addEventListener('ugc:trial-expired', onTrialExpired);
-    return () => window.removeEventListener('ugc:trial-expired', onTrialExpired);
+    window.addEventListener('ugc:quota-exceeded', onQuotaExceeded);
+    return () => {
+      window.removeEventListener('ugc:trial-expired', onTrialExpired);
+      window.removeEventListener('ugc:quota-exceeded', onQuotaExceeded);
+    };
   }, [navigate]);
 
   const isPro = subscription?.plan === 'pro' && subscription.status === 'active';
@@ -31,6 +39,36 @@ export default function Dashboard() {
             <Sparkles className="w-5 h-5 text-fuchsia-400" /> UGC Scriptwriter
           </Link>
           <div className="flex items-center gap-3 text-sm">
+            {subscription?.usage && (
+              <div className="hidden md:flex items-center gap-2 text-xs">
+                {(
+                  [
+                    ['script', 'Script'],
+                    ['image', 'Gambar'],
+                    ['video', 'Video'],
+                  ] as const
+                ).map(([key, label]) => {
+                  const u = subscription.usage![key];
+                  if (!u) return null;
+                  const low = u.used >= u.limit;
+                  return (
+                    <span
+                      key={key}
+                      className={
+                        low
+                          ? 'px-2 py-1 rounded-full bg-red-500/15 text-red-400 font-semibold'
+                          : u.used / u.limit > 0.8
+                          ? 'px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 font-semibold'
+                          : 'px-2 py-1 rounded-full bg-slate-800 text-slate-400'
+                      }
+                      title={`${label}: ${u.used} dari ${u.limit} bulan ini`}
+                    >
+                      {label} {u.used}/{u.limit}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             {isPro ? (
               <span className="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold text-xs">
                 PRO

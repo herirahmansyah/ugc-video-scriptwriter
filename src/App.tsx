@@ -58,6 +58,10 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentScript, setCurrentScript] = useState<UGCScriptResult | null>(null);
 
+  // Preview image state
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+
   // Modals & Drawers state
   const [isTeleprompterOpen, setIsTeleprompterOpen] = useState(false);
   const [isAudioPlayerOpen, setIsAudioPlayerOpen] = useState(false);
@@ -182,6 +186,7 @@ export default function App() {
 
       const data: UGCScriptResult = await response.json();
       setCurrentScript(data);
+      setPreviewImage(null); // Reset preview for new script
 
       // Save to history
       setSavedScripts((prev) => [data, ...prev.filter((s) => s.id !== data.id)].slice(0, 25));
@@ -215,6 +220,34 @@ export default function App() {
 
   const handleOptionChange = (updates: Partial<UGCRequestOptions>) => {
     setCampaignOptions((prev) => ({ ...prev, ...updates }));
+  };
+
+  const handleGeneratePreview = async () => {
+    if (!characterImage || !productImage) return;
+    setIsGeneratingPreview(true);
+    try {
+      const prompt = `Create a UGC-style product review photo: a real person (from the reference photo) casually using or holding this product in a natural, authentic setting. The person looks natural and genuine, like they are recommending the product to a friend. Product should be clearly visible and well-lit. Natural lighting, smartphone-quality aesthetic, not overly polished or commercial.`;
+      const response = await authFetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          baseImage: {
+            data: characterImage.data,
+            mimeType: characterImage.mimeType,
+          },
+          aspectRatio: '9:16',
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.imageUrl) setPreviewImage(data.imageUrl);
+      }
+    } catch (err) {
+      console.error('Preview generation failed:', err);
+    } finally {
+      setIsGeneratingPreview(false);
+    }
   };
 
   return (
@@ -502,6 +535,9 @@ export default function App() {
                   script={currentScript}
                   onOpenTeleprompter={() => setIsTeleprompterOpen(true)}
                   onPlayAudio={() => setIsAudioPlayerOpen(true)}
+                  previewImage={previewImage}
+                  onGeneratePreview={handleGeneratePreview}
+                  isGeneratingPreview={isGeneratingPreview}
                 />
               </section>
             )}
