@@ -1,0 +1,7 @@
+{
+  "name": "UGC Video Scriptwriter",
+  "description": "Expert AI Marketing Director & UGC Video Scriptwriter analyzing talent and product photos to generate high-converting social media scripts and captions.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
