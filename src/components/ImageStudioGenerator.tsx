@@ -15,6 +15,7 @@ import {
   Video,
 } from 'lucide-react';
 import { GeneratedImageItem } from '../types';
+import { authFetch } from '../lib/api';
 import { CHARACTER_PRESETS, PRODUCT_PRESETS } from '../data/presets';
 import { urlToBase64 } from '../utils/imageHelper';
 
@@ -154,7 +155,7 @@ export function ImageStudioGenerator({
         };
       }
 
-      const response = await fetch('/api/generate-image', {
+      const response = await authFetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

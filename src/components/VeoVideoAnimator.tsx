@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { GeneratedVideoItem } from '../types';
+import { authFetch } from '../lib/api';
 import { CHARACTER_PRESETS, PRODUCT_PRESETS } from '../data/presets';
 import { urlToBase64 } from '../utils/imageHelper';
 
@@ -169,7 +170,7 @@ export function VeoVideoAnimator({ initialImage, onSendToUgc }: VeoVideoAnimator
       setProgressPercent(Math.min(94, Math.round((attempts / 30) * 100)));
 
       try {
-        const res = await fetch('/api/video-status', {
+        const res = await authFetch('/api/video-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ operationName }),
@@ -191,7 +192,7 @@ export function VeoVideoAnimator({ initialImage, onSendToUgc }: VeoVideoAnimator
           setProgressStep('Mengunduh stream video MP4...');
 
           // Download video stream from proxy
-          const downloadRes = await fetch('/api/video-download', {
+          const downloadRes = await authFetch('/api/video-download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ operationName }),
@@ -248,7 +249,7 @@ export function VeoVideoAnimator({ initialImage, onSendToUgc }: VeoVideoAnimator
     setProgressStep('Mengirim request ke Veo (veo-3.1-fast-generate-preview)...');
 
     try {
-      const response = await fetch('/api/generate-video', {
+      const response = await authFetch('/api/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

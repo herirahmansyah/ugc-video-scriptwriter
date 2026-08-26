@@ -1,6 +1,6 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
+import AppRouter from './AppRouter.tsx';
 import './index.css';
 
 // Catch benign development websocket closing events
@@ -17,6 +17,6 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AppRouter />
   </StrictMode>,
 );

@@ -1,17 +1,207 @@
 import express from 'express';
+import crypto from 'crypto';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { pool, initDb, getOrCreateSubscription, isAccessActive } from './server/db';
+import {
+  hashPassword,
+  verifyPassword,
+  signToken,
+  requireAuth,
+  requireAccess,
+} from './server/auth';
+import {
+  createSnapTransaction,
+  verifyMidtransSignature,
+  STATUS_API,
+  PRICE_IDR,
+} from './server/midtrans';
+import { startCronJobs } from './server/cron';
+import { enforceConfig } from './server/config';
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 // Body parser with 50mb limit for base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ==========================================
+// AUTH ENDPOINTS
+// ==========================================
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, name } = req.body || {};
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Nama, email, dan password wajib diisi.' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password minimal 8 karakter.' });
+    }
+
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [
+      String(email).toLowerCase(),
+    ]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Email sudah terdaftar. Silakan login.' });
+    }
+
+    const inserted = await pool.query(
+      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+      [String(email).toLowerCase(), hashPassword(password), name]
+    );
+    const user = inserted.rows[0];
+    await getOrCreateSubscription(user.id);
+
+    const token = signToken(user);
+    return res.json({ token, user });
+  } catch (error: any) {
+    console.error('Register error:', error);
+    return res.status(500).json({ error: 'Gagal mendaftarkan akun.' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email dan password wajib diisi.' });
+    }
+
+    const found = await pool.query(
+      'SELECT id, email, name, password_hash FROM users WHERE email = $1',
+      [String(email).toLowerCase()]
+    );
+    if (found.rows.length === 0 || !verifyPassword(password, found.rows[0].password_hash)) {
+      return res.status(401).json({ error: 'Email atau password salah.' });
+    }
+
+    const user = found.rows[0];
+    await getOrCreateSubscription(user.id);
+    const token = signToken(user);
+    delete user.password_hash;
+    return res.json({ token, user });
+  } catch (error: any) {
+    console.error('Login error:', error);
+    return res.status(500).json({ error: 'Gagal login.' });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const found = await pool.query(
+      'SELECT id, email, name FROM users WHERE id = $1',
+      [req.authUser!.id]
+    );
+    if (found.rows.length === 0) return res.status(404).json({ error: 'User not found.' });
+    return res.json({ user: found.rows[0] });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Gagal mengambil profil.' });
+  }
+});
+
+// ==========================================
+// SUBSCRIPTION STATUS + MIDTRANS SNAP
+// ==========================================
+app.get('/api/subscription/status', requireAuth, async (req, res) => {
+  try {
+    const sub = await getOrCreateSubscription(req.authUser!.id);
+    return res.json({
+      plan: sub.plan,
+      status: sub.status,
+      trial_ends_at: sub.trial_ends_at,
+      current_period_end: sub.current_period_end,
+      access_active: isAccessActive(sub),
+      price_idr: PRICE_IDR,
+    });
+  } catch (error: any) {
+    console.error('Subscription status error:', error);
+    return res.status(500).json({ error: 'Gagal mengambil status langganan.' });
+  }
+});
+
+app.post('/api/subscription/create', requireAuth, async (req, res) => {
+  try {
+    const userId = req.authUser!.id;
+    const orderId = `UGC-${userId.slice(0, 8)}-${Date.now()}`;
+    const sub = await getOrCreateSubscription(userId);
+
+    await pool.query(
+      'UPDATE subscriptions SET midtrans_order_id = $1, updated_at = now() WHERE user_id = $2',
+      [orderId, userId]
+    );
+
+    const snap = await createSnapTransaction({
+      orderId,
+      grossAmount: PRICE_IDR,
+      customerEmail: req.authUser!.email,
+      customerName: req.authUser!.name || req.authUser!.email,
+    });
+
+    return res.json({ token: snap.token, redirect_url: snap.redirect_url, order_id: orderId });
+  } catch (error: any) {
+    console.error('Create subscription error:', error);
+    return res.status(500).json({ error: error?.message || 'Gagal membuat transaksi Midtrans.' });
+  }
+});
+
+// ==========================================
+// MIDTRANS WEBHOOK
+// ==========================================
+app.post('/api/midtrans/webhook', async (req, res) => {
+  try {
+    const body = req.body;
+    if (!verifyMidtransSignature(body)) {
+      return res.status(403).json({ error: 'Invalid signature.' });
+    }
+
+    const { order_id, transaction_status, fraud_status } = body;
+    console.info(`Midtrans webhook: ${order_id} -> ${transaction_status} (${fraud_status})`);
+
+    const found = await pool.query(
+      'SELECT user_id FROM subscriptions WHERE midtrans_order_id = $1',
+      [order_id]
+    );
+    if (found.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    const userId = found.rows[0].user_id;
+
+    if (
+      transaction_status === 'capture' ||
+      transaction_status === 'settlement'
+    ) {
+      if (fraud_status && fraud_status !== 'accept') {
+        return res.json({ received: true, ignored: 'fraud review pending' });
+      }
+      const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await pool.query(
+        `UPDATE subscriptions
+         SET plan = 'pro', status = 'active', current_period_end = $1, updated_at = now()
+         WHERE user_id = $2`,
+        [periodEnd, userId]
+      );
+    } else if (
+      transaction_status === 'expire' ||
+      transaction_status === 'cancel' ||
+      transaction_status === 'deny'
+    ) {
+      await pool.query(
+        `UPDATE subscriptions SET status = CASE WHEN current_period_end > now() THEN 'active' ELSE 'expired' END, updated_at = now() WHERE user_id = $1`,
+        [userId]
+      );
+    }
+
+    return res.json({ received: true });
+  } catch (error: any) {
+    console.error('Midtrans webhook error:', error);
+    return res.status(500).json({ error: 'Webhook processing failed.' });
+  }
+});
 
 // Lazy initialize Gemini client
 let genAIClient: GoogleGenAI | null = null;
@@ -267,12 +457,13 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     hasApiKey: !!process.env.GEMINI_API_KEY,
+    midtransConfigured: !!process.env.MIDTRANS_SERVER_KEY,
     timestamp: new Date().toISOString(),
   });
 });
 
 // Main UGC Script Generator API
-app.post('/api/generate-ugc', async (req, res) => {
+app.post('/api/generate-ugc', requireAuth, requireAccess, async (req, res) => {
   try {
     const {
       characterImage,
@@ -563,7 +754,7 @@ Please analyze the 2 provided images (Image 1: Creator, Image 2: Product) and ou
 });
 
 // Quick Hook Generator API
-app.post('/api/generate-more-hooks', async (req, res) => {
+app.post('/api/generate-more-hooks', requireAuth, requireAccess, async (req, res) => {
   try {
     const { scriptContext, productSummary, language = 'id_casual' } = req.body;
     const ai = getGenAI();
@@ -667,7 +858,7 @@ Output format: JSON array of objects with { "hookName": string, "visualAction": 
 // ==========================================
 // 1. Veo Video Generation API (Animate Image to Video)
 // ==========================================
-app.post('/api/generate-video', async (req, res) => {
+app.post('/api/generate-video', requireAuth, requireAccess, async (req, res) => {
   try {
     const {
       image, // { data: string (base64), mimeType: string }
@@ -739,7 +930,7 @@ app.post('/api/generate-video', async (req, res) => {
 });
 
 // Video generation status polling API
-app.post('/api/video-status', async (req, res) => {
+app.post('/api/video-status', requireAuth, requireAccess, async (req, res) => {
   try {
     const { operationName } = req.body;
     if (!operationName) {
@@ -764,7 +955,7 @@ app.post('/api/video-status', async (req, res) => {
 });
 
 // Video stream/download proxy API
-app.post('/api/video-download', async (req, res) => {
+app.post('/api/video-download', requireAuth, requireAccess, async (req, res) => {
   try {
     const { operationName } = req.body;
     if (!operationName) {
@@ -822,7 +1013,7 @@ app.post('/api/video-download', async (req, res) => {
 // ==========================================
 // 2. Create & Edit Images API (gemini-3.1-flash-image-preview)
 // ==========================================
-app.post('/api/generate-image', async (req, res) => {
+app.post('/api/generate-image', requireAuth, requireAccess, async (req, res) => {
   try {
     const {
       prompt,
@@ -931,6 +1122,11 @@ app.post('/api/generate-image', async (req, res) => {
 
 // Vite & Express Integration
 async function startServer() {
+  enforceConfig();
+  await initDb();
+  console.log('Database initialized.');
+  startCronJobs();
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: {

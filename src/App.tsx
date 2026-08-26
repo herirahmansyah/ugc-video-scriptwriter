@@ -27,6 +27,7 @@ import { ImageStudioGenerator } from './components/ImageStudioGenerator';
 import { CHARACTER_PRESETS, PRODUCT_PRESETS } from './data/presets';
 import { UGCRequestOptions, UGCScriptResult } from './types';
 import { urlToBase64 } from './utils/imageHelper';
+import { authFetch } from './lib/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'ugc' | 'veo' | 'image_studio'>('ugc');
@@ -152,7 +153,7 @@ export default function App() {
     }, 7000);
 
     try {
-      const response = await fetch('/api/generate-ugc', {
+      const response = await authFetch('/api/generate-ugc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
