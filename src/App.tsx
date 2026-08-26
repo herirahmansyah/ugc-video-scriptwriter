@@ -172,6 +172,7 @@ export default function App() {
           platform: options.platform || 'tiktok',
           language: options.language || 'id_casual',
           hookStyle: options.hookStyle || 'shocking_regret',
+          productName: options.productName || '',
           targetAudience: options.targetAudience || '',
           productKeyPoints: options.productKeyPoints || '',
           creatorVibeNotes: options.creatorVibeNotes || '',

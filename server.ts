@@ -245,6 +245,7 @@ function generateResilientBackupScript(params: {
   platform: string;
   language: string;
   hookStyle: string;
+  productName?: string;
   targetAudience?: string;
   productKeyPoints?: string;
   creatorVibeNotes?: string;
@@ -252,6 +253,7 @@ function generateResilientBackupScript(params: {
 }): any {
   const isIndo = params.language?.startsWith('id');
   const platform = params.platform || 'tiktok';
+  const prodName = params.productName || 'produk ini';
   
   const isTikTok = platform === 'tiktok';
   const isShopee = platform === 'shopee';
@@ -264,14 +266,14 @@ function generateResilientBackupScript(params: {
 
   const ctaSpoken = isIndo
     ? (isTikTok 
-        ? 'Klik keranjang kuning sekarang sebelum promonya kehabisan ya!'
+        ? `Klik keranjang kuning sekarang buat dapetin ${prodName} sebelum kehabisan ya!`
         : isShopee 
-        ? 'Langsung checkout di keranjang oranye mumpung gratis ongkir & diskon kilat!'
-        : 'Cek link di bio sekarang juga buat klaim harga promo bundling!')
-    : 'Click the link in my bio / yellow basket right now before this limited deal ends!';
+        ? `Langsung checkout ${prodName} di keranjang oranye mumpung gratis ongkir & diskon kilat!`
+        : `Cek link di bio sekarang juga buat klaim harga promo ${prodName}!`)
+    : `Click the link in my bio / yellow basket right now to get ${prodName} before this deal ends!`;
 
   return {
-    title: isIndo ? 'Formula UGC Viral Konversi Tinggi' : 'High-Converting Viral UGC Ad',
+    title: isIndo ? `${prodName} — Script UGC Viral Konversi Tinggi` : `${prodName} — High-Converting Viral UGC Ad`,
     analisisVisual: {
       characterVibe: isIndo
         ? 'Ekspresi wajah natural, percaya diri, dan ramah dengan pencahayaan terang yang menonjolkan kedekatan emosional dengan audiens.'
@@ -487,6 +489,7 @@ app.post('/api/generate-ugc', requireAuth, requireAccess, requireQuota('script')
       platform = 'tiktok',
       language = 'id_casual',
       hookStyle = 'shocking_regret',
+      productName = '',
       targetAudience = '',
       productKeyPoints = '',
       creatorVibeNotes = '',
@@ -567,6 +570,7 @@ Strict Requirements & Output Guidelines:
 - ${languageGuides[language] || language}
 - ${hookStyleGuides[hookStyle] || hookStyle}
 - Target Duration: ${durationTarget}
+${productName ? `- Product Name: "${productName}" (MUST mention this exact product name in the script, CTA, and caption)` : ''}
 ${targetAudience ? `- Target Audience: ${targetAudience}` : ''}
 ${productKeyPoints ? `- Must-Mention Product Selling Points: ${productKeyPoints}` : ''}
 ${creatorVibeNotes ? `- Specific Talent Direction Notes: ${creatorVibeNotes}` : ''}
@@ -732,6 +736,7 @@ Please analyze the 2 provided images (Image 1: Creator, Image 2: Product) and ou
         platform,
         language,
         hookStyle,
+        productName,
         targetAudience,
         productKeyPoints,
         creatorVibeNotes,

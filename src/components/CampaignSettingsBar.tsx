@@ -84,6 +84,24 @@ export const CampaignSettingsBar: React.FC<CampaignSettingsBarProps> = ({
         </div>
       </div>
 
+      {/* Product Name Input */}
+      <div className="mt-4">
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+          <Tag className="h-3.5 w-3.5 text-indigo-500" /> Nama Produk
+        </label>
+        <input
+          type="text"
+          placeholder="Contoh: GlowUp Serum, Snack Keripik Pedas, dll."
+          value={options.productName || ''}
+          onChange={(e) => onChange({ productName: e.target.value })}
+          disabled={disabled}
+          className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:placeholder-slate-500 dark:focus:border-indigo-400"
+        />
+        <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+          Nama produk akan disebut dalam script, CTA, dan caption
+        </p>
+      </div>
+
       {/* Main Grid: Platform, Language, Hook Formula */}
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* Platform Selection */}
