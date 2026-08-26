@@ -103,6 +103,25 @@ export const CampaignSettingsBar: React.FC<CampaignSettingsBarProps> = ({
         </p>
       </div>
 
+      {/* Product Description */}
+      <div className="mt-3">
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+          <Tag className="h-3.5 w-3.5 text-indigo-500" /> Deskripsi Produk
+        </label>
+        <textarea
+          placeholder="Contoh: Serum wajah dengan kandungan Vitamin C 20%, harga Rp 89rb, cocok untuk kulit berminyak, hasil terlihat dalam 2 minggu pemakaian rutin."
+          value={options.productDescription || ''}
+          onChange={(e) => onChange({ productDescription: e.target.value })}
+          disabled={disabled}
+          rows={3}
+          style={{ WebkitTextFillColor: 'inherit', caretColor: 'inherit' }}
+          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-400 dark:focus:border-indigo-400 dark:focus:bg-white dark:focus:text-slate-900 resize-none"
+        />
+        <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+          Semakin detail deskripsi, semakin akurat analisis & script yang dihasilkan AI
+        </p>
+      </div>
+
       {/* Main Grid: Platform, Language, Hook Formula */}
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* Platform Selection */}

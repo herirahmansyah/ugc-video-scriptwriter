@@ -246,6 +246,7 @@ function generateResilientBackupScript(params: {
   language: string;
   hookStyle: string;
   productName?: string;
+  productDescription?: string;
   targetAudience?: string;
   productKeyPoints?: string;
   creatorVibeNotes?: string;
@@ -279,8 +280,8 @@ function generateResilientBackupScript(params: {
         ? 'Ekspresi wajah natural, percaya diri, dan ramah dengan pencahayaan terang yang menonjolkan kedekatan emosional dengan audiens.'
         : 'Warm, relatable, natural creator presence with bright aesthetic lighting.',
       productCoreSellingPoints: isIndo
-        ? (params.productKeyPoints || 'Desain kemasan premium, praktis digunakan, dan memberikan hasil yang nyata dalam penggunaan rutin.')
-        : (params.productKeyPoints || 'Premium aesthetic packaging, highly effective everyday problem solver.'),
+        ? (params.productDescription || params.productKeyPoints || 'Desain kemasan premium, praktis digunakan, dan memberikan hasil yang nyata dalam penggunaan rutin.')
+        : (params.productDescription || params.productKeyPoints || 'Premium aesthetic packaging, highly effective everyday problem solver.'),
       synergyStrategy: isIndo
         ? 'Persona talent yang otentik dan bersahabat menciptakan impresi review jujur (non-iklan), sehingga tingkat kepercayaan dan conversion rate meningkat tajam.'
         : 'Authentic peer-to-peer recommendation style that drives immediate impulse buying.',
@@ -490,6 +491,7 @@ app.post('/api/generate-ugc', requireAuth, requireAccess, requireQuota('script')
       language = 'id_casual',
       hookStyle = 'shocking_regret',
       productName = '',
+      productDescription = '',
       targetAudience = '',
       productKeyPoints = '',
       creatorVibeNotes = '',
@@ -571,6 +573,7 @@ Strict Requirements & Output Guidelines:
 - ${hookStyleGuides[hookStyle] || hookStyle}
 - Target Duration: ${durationTarget}
 ${productName ? `- Product Name: "${productName}" (MUST mention this exact product name in the script, CTA, and caption)` : ''}
+${productDescription ? `- Product Description: "${productDescription}" (Use this as the ground truth for all analysis and script content. Do NOT hallucinate or invent details that contradict this description.)` : ''}
 ${targetAudience ? `- Target Audience: ${targetAudience}` : ''}
 ${productKeyPoints ? `- Must-Mention Product Selling Points: ${productKeyPoints}` : ''}
 ${creatorVibeNotes ? `- Specific Talent Direction Notes: ${creatorVibeNotes}` : ''}
@@ -737,6 +740,7 @@ Please analyze the 2 provided images (Image 1: Creator, Image 2: Product) and ou
         language,
         hookStyle,
         productName,
+        productDescription,
         targetAudience,
         productKeyPoints,
         creatorVibeNotes,

@@ -15,6 +15,7 @@ export interface UGCRequestOptions {
   language: 'id_casual' | 'id_jaksel' | 'id_formal' | 'en_casual' | 'en_genz';
   hookStyle: 'curiosity' | 'storytelling' | 'shocking_regret' | 'relatable_pov' | 'unboxing' | 'before_after' | 'problem_solver';
   productName?: string;
+  productDescription?: string;
   targetAudience?: string;
   productKeyPoints?: string;
   creatorVibeNotes?: string;

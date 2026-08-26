@@ -173,6 +173,7 @@ export default function App() {
           language: options.language || 'id_casual',
           hookStyle: options.hookStyle || 'shocking_regret',
           productName: options.productName || '',
+          productDescription: options.productDescription || '',
           targetAudience: options.targetAudience || '',
           productKeyPoints: options.productKeyPoints || '',
           creatorVibeNotes: options.creatorVibeNotes || '',
